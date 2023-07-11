@@ -1,6 +1,4 @@
 use crate::error;
-#[cfg(feature = "enclave")]
-use rand::prelude::IteratorRandom;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use trust_dns_resolver::config::ResolverOpts;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
@@ -28,8 +26,10 @@ pub async fn get_ip_for_host_with_dns_resolver(
     dns_resolver: &AsyncDnsResolver,
     host: &str,
     port: u16,
-) -> error::Result<Option<SocketAddr>> {
-    #[cfg(feature = "enclave")]
+) -> error::Result<SocketAddr> {
+    use crate::error::ServerError;
+    use rand::prelude::IteratorRandom;
+
     let addr = dns_resolver
         .lookup_ip(host)
         .await?
@@ -37,15 +37,12 @@ pub async fn get_ip_for_host_with_dns_resolver(
         .choose(&mut rand::thread_rng())
         .map(|ip| SocketAddr::new(ip, port));
 
-    Ok(addr)
+    addr.ok_or(ServerError::DNSNotFound)
 }
 
 #[cfg(not(feature = "enclave"))]
-pub fn get_ip_for_localhost(port: u16) -> error::Result<Option<SocketAddr>> {
-    let addr = Some(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-        port,
-    ));
+pub fn get_ip_for_localhost(port: u16) -> error::Result<SocketAddr> {
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
 
     Ok(addr)
 }
